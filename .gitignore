@@ -1,0 +1,15 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Swift build output and the built app (rebuild with mac-overlay/build_app.sh)
+mac-overlay/.build/
+mac-overlay/*.app/
+
+# Large model file (download with brain/models/download.sh)
+brain/models/*.onnx
+
+# macOS / Office temp files
+.DS_Store
+~$*.xlsx

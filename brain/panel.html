@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Japanese Eyes</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+  :root {
+    --bg:#fbfbf9; --fg:#1d1d1f; --muted:#6b6b70; --faint:#9a9aa0; --line:#e6e6e2; --card:#ffffff;
+    --accent:#c2410c; --accent-bg:#fff4ec; --chip:#f2f2ef; --sel:#fde7d6;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#1b1b1d; --fg:#ececec; --muted:#a0a0a6; --faint:#76767c; --line:#333338; --card:#242427;
+    --accent:#ff9a5c; --accent-bg:#3a2418; --chip:#2e2e32; --sel:#4a2c1a;
+  } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:10px 12px 24px; background:var(--bg); color:var(--fg);
+         font:14px/1.45 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  .toolbar { position:sticky; top:0; z-index:2; display:flex; gap:6px; flex-wrap:wrap; align-items:center;
+             background:var(--bg); padding:4px 0 8px; font-size:12px; color:var(--muted); }
+  .toolbar button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--fg);
+                    border-radius:999px; padding:3px 10px; cursor:pointer; }
+  .toolbar button.off { color:var(--faint); text-decoration:line-through; background:transparent; }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:14px; }
+  .thumb { max-width:100%; max-height:90px; border-radius:6px; border:1px solid var(--line); display:block; margin-bottom:10px; }
+  .pending { color:var(--muted); }
+  .spin { display:inline-block; width:10px; height:10px; border:2px solid var(--muted); border-top-color:transparent;
+          border-radius:50%; animation:s 1s linear infinite; margin-right:6px; vertical-align:-1px; }
+  @keyframes s { to { transform:rotate(360deg) } }
+  .err { color:var(--accent); white-space:pre-wrap; }
+
+  /* word-by-word */
+  .il { display:flex; flex-wrap:wrap; gap:10px 4px; align-items:flex-start; }
+  .tok { display:flex; flex-direction:column; align-items:center; text-align:center; padding:4px 6px 5px;
+         border-radius:8px; cursor:pointer; min-width:28px; border:1px solid transparent; }
+  .tok:hover { border-color:var(--line); }
+  .tok.sel { background:var(--sel); border-color:var(--accent); }
+  .tok .s { font-size:24px; line-height:1.15; font-weight:500; letter-spacing:.02em; }
+  .tok .r { font-size:12px; color:var(--muted); min-height:17px; }
+  .tok .ro { font-size:11px; color:var(--faint); min-height:15px; font-style:italic; }
+  .tok .g { font-size:12px; color:var(--accent); min-height:17px; max-width:110px; line-height:1.25; }
+  .tok.particle .s, .tok.ending .s { color:var(--muted); }
+  .tok.punct { cursor:default; padding:4px 1px; min-width:0; }
+  .tok.punct .s { color:var(--faint); }
+  .tok.sound .s { color:var(--faint); font-size:18px; }
+  .tok .chg { font-size:10px; color:var(--accent); line-height:1; height:8px; }
+  body.hide-r .tok .r, body.hide-ro .tok .ro, body.hide-g .tok .g { visibility:hidden; }
+  body.hide-r .tok:hover .r, body.hide-ro .tok:hover .ro, body.hide-g .tok:hover .g,
+  body.hide-r .tok.sel .r, body.hide-ro .tok.sel .ro, body.hide-g .tok.sel .g { visibility:visible; }
+
+  .detail { margin:6px 0 2px; padding:8px 10px; border-radius:8px; background:var(--accent-bg); font-size:13px; display:none; }
+  .detail.open { display:block; }
+  .detail b { font-size:15px; }
+
+  .tr { margin:10px 0 4px; padding-left:10px; border-left:3px solid var(--accent); }
+  .tr .lit { color:var(--muted); font-size:12.5px; }
+  .tr .nat { font-size:15px; font-weight:600; }
+  body.hide-tr .tr .nat { filter:blur(5px); cursor:pointer; }
+  body.hide-tr .tr .nat:hover { filter:none; }
+  .lineblock + .lineblock { margin-top:16px; padding-top:12px; border-top:1px dashed var(--line); }
+
+  h4 { margin:16px 0 8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .kgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:8px; }
+  .kc { display:flex; gap:10px; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+  .kc.sel { border-color:var(--accent); background:var(--accent-bg); }
+  .kc .big { font-size:38px; line-height:1; min-width:44px; text-align:center; padding-top:2px; }
+  .kc .m { font-weight:600; }
+  .kc .rd { font-size:12px; color:var(--muted); }
+  .kc .rd span { color:var(--fg); }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+  .chip { background:var(--chip); border-radius:6px; padding:1px 6px; font-size:12px; }
+  .chip.rad { border:1px dashed var(--faint); background:transparent; }
+  .gram { display:flex; flex-direction:column; gap:8px; }
+  .g1 { font-size:13px; }
+  .g1 .ex { color:var(--muted); font-size:12.5px; }
+  .badge { font-size:10.5px; border-radius:999px; padding:0 7px; vertical-align:1px; }
+  .badge.new { background:var(--accent); color:var(--card); }
+  .badge.old { border:1px solid var(--line); color:var(--muted); }
+  .notes ul { margin:0; padding-left:18px; } .notes p, .notes li { font-size:13px; margin:2px 0; }
+  details.notes { margin-top:14px; }
+  details.notes summary { cursor:pointer; color:var(--muted); font-size:12px; letter-spacing:.06em; text-transform:uppercase; }
+  details.notes p, details.notes li { font-size:13.5px; }
+  .pending.small { font-size:12.5px; margin:14px 0 0; }
+  .foot { margin-top:10px; font-size:11.5px; color:var(--faint); }
+  .empty { color:var(--muted); padding:20px 4px; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span>Show:</span>
+  <button data-k="r">reading</button>
+  <button data-k="ro">romaji</button>
+  <button data-k="g">meaning</button>
+  <button data-k="tr">translation</button>
+  <span style="flex:1"></span><span>hidden rows show on hover</span>
+</div>
+<div id="list"><p class="empty" id="empty">Press ⌃⌥J over a game, then click Japanese text or drag a box around it.</p></div>
+
+<script>
+const $list = document.getElementById('list');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KANJI = /[㐀-䶿一-鿿]/g;
+
+// show/hide toggles (remembered per viewer)
+let prefs = {};
+try { prefs = JSON.parse(localStorage.getItem('jp-hide') || '{}'); } catch (e) {}
+function applyPrefs() {
+  for (const b of document.querySelectorAll('.toolbar button')) {
+    const k = b.dataset.k; b.classList.toggle('off', !!prefs[k]);
+    document.body.classList.toggle('hide-' + k, !!prefs[k]);
+  }
+}
+document.querySelectorAll('.toolbar button').forEach(b => b.onclick = () => {
+  prefs[b.dataset.k] = !prefs[b.dataset.k];
+  try { localStorage.setItem('jp-hide', JSON.stringify(prefs)); } catch (e) {}
+  applyPrefs();
+});
+applyPrefs();
+
+function card(id) { return document.getElementById('c' + id); }
+const timers = {};
+
+// A card has one slot per stage, filled in as each stage arrives.
+function addPending(id, thumb, text) {
+  document.getElementById('empty')?.remove();
+  const c = document.createElement('section'); c.className = 'card'; c.id = 'c' + id;
+  c._kanji = {}; c._lines = [];
+  c.innerHTML = (thumb ? `<img class="thumb" src="data:image/png;base64,${thumb}">` : '') +
+    `<div class="slot" data-s="words"><p class="pending"><span class="spin"></span>Reading ${text ? '「' + esc(text) + '」' : 'the text'}… <span class="secs">0 s</span></p></div>
+     <div class="slot" data-s="kanji"></div>
+     <div class="slot" data-s="grammar"></div>
+     <div class="slot" data-s="notes"></div>
+     <div class="foot"></div>`;
+  $list.prepend(c);
+  const t0 = Date.now();
+  timers[id] = setInterval(() => c.querySelectorAll('.secs').forEach(e => e.textContent = Math.round((Date.now() - t0) / 1000) + ' s'), 1000);
+}
+const slot = (c, s) => c.querySelector(`.slot[data-s="${s}"]`);
+const waiting = what => `<p class="pending small"><span class="spin"></span>${what}… <span class="secs"></span></p>`;
+
+// Follow a job on the brain: each stage shows up as soon as it's ready.
+function follow(id, job) {
+  const c = card(id) || (addPending(id, '', ''), card(id));
+  const es = new EventSource(`/jobs/${job}/events`);
+  es.onmessage = m => {
+    const ev = JSON.parse(m.data);
+    if (ev.stage === 'done') { es.close(); clearInterval(timers[id]); c.querySelectorAll('.pending').forEach(e => e.remove()); return; }
+    render(c, id, ev.stage, ev.data);
+  };
+  es.onerror = () => { if (es.readyState === EventSource.CLOSED) clearInterval(timers[id]); };
+}
+
+// Old one-shot result (all stages at once).
+function setResult(id, r) {
+  const c = card(id) || (addPending(id, '', ''), card(id));
+  render(c, id, 'words', r); render(c, id, 'kanji', r); render(c, id, 'grammar', r);
+  render(c, id, 'saved', { saved: r.saved !== false });
+  clearInterval(timers[id]); c.querySelectorAll('.pending').forEach(e => e.remove());
+}
+
+function setError(id, msg) {
+  const c = card(id); clearInterval(timers[id]);
+  c.querySelectorAll('.pending').forEach(e => e.remove());
+  c.insertAdjacentHTML('beforeend', `<p class="err">Failed: ${esc(msg)}</p>`);
+}
+
+function render(c, id, stage, d) {
+  if (stage === 'words') {
+    c._lines = d.lines || [];
+    slot(c, 'words').innerHTML = renderLines(id, c._lines);
+    slot(c, 'kanji').innerHTML = waiting('Kanji decomposition');
+    slot(c, 'grammar').innerHTML = waiting('Grammar');
+    bindTokens(c, id);
+  } else if (stage === 'kanji') {   // arrives in groups of ~3 kanji
+    c._kanjiList = (c._kanjiList || []).concat(d.kanji || []);
+    (d.kanji || []).forEach(k => c._kanji[k.kanji] = k);
+    slot(c, 'kanji').innerHTML = renderKanji(c._kanjiList) + (d.remaining > 0 ? waiting('More kanji') : '');
+    if (d.explanation_md) {
+      c._notes = (c._notes || '') + '\n' + d.explanation_md;
+      const md = window.marked ? marked.parse(c._notes) : `<pre>${esc(c._notes)}</pre>`;
+      slot(c, 'notes').innerHTML = `<h4>Memory tricks</h4><div class="notes">${md}</div>`;
+    }
+    const sel = c.querySelector('.tok.sel'); if (sel) { sel.click(); sel.click(); }   // refresh open detail
+  } else if (stage === 'grammar') {
+    slot(c, 'grammar').innerHTML = renderGrammar(d.grammar || []);
+  } else if (stage === 'saved') {
+    c.querySelector('.foot').textContent = d.saved ? 'Saved to japanese.xlsx and grammar.md' : 'Not saved';
+  } else if (stage === 'error') {
+    const s = slot(c, d.stage) || c.querySelector('.foot');
+    s.innerHTML = `<p class="err">${esc(d.stage)} failed: ${esc(d.message)}</p>`;
+  }
+}
+
+function renderLines(id, lines) {
+  let html = '';
+  lines.forEach((line, li) => {
+    const toks = (line.tokens && line.tokens.length) ? line.tokens
+      : [{ surface: line.jp, reading: line.hiragana, romaji: line.romaji, gloss: '', kind: 'word' }];
+    html += `<div class="lineblock"><div class="il">`;
+    toks.forEach((t, ti) => {
+      const kind = t.kind || 'word';
+      if (kind === 'punct') { html += `<div class="tok punct"><div class="chg"></div><div class="s">${esc(t.surface)}</div></div>`; return; }
+      const showReading = t.reading && t.reading !== t.surface;
+      html += `<div class="tok ${esc(kind)}" data-l="${li}" data-t="${ti}">
+        <div class="chg">${t.dict_form ? '◆' : ''}</div>
+        <div class="s">${esc(t.surface)}</div>
+        <div class="r">${showReading ? esc(t.reading) : ''}</div>
+        <div class="ro">${esc(t.romaji)}</div>
+        <div class="g">${esc(t.gloss)}</div></div>`;
+    });
+    html += `</div><div class="detail" id="d${id}-${li}"></div>
+      <div class="tr"><div class="lit">${esc(line.literal)}</div><div class="nat">${esc(line.natural)}</div></div></div>`;
+  });
+  return html;
+}
+
+function renderKanji(list) {
+  const direct = list.filter(k => k.direct);
+  if (!direct.length) return '';
+  let html = `<h4>Kanji decomposition</h4><div class="kgrid">`;
+  for (const k of direct) {
+    const parts = String(k.components || '').split('+').map(s => s.trim()).filter(Boolean);
+    html += `<div class="kc" data-k="${esc(k.kanji)}"><div class="big">${esc(k.kanji)}</div><div>
+      <div class="m">${esc(k.meaning)}</div>
+      <div class="rd">on <span>${esc(k.onyomi)}</span> · kun <span>${esc(k.kunyomi)}</span></div>
+      <div class="chips">${parts.map(p => `<span class="chip">${esc(p)}</span>`).join('')}
+        ${k.radical ? `<span class="chip rad" title="radical">部首 ${esc(k.radical)}</span>` : ''}</div>
+    </div></div>`;
+  }
+  return html + `</div>`;
+}
+
+function renderGrammar(list) {
+  if (!list.length) return '';
+  let html = `<h4>Grammar</h4><div class="gram">`;
+  for (const g of list) {
+    const badge = g.known === undefined ? '' : `<span class="badge ${g.known ? 'old' : 'new'}">${g.known ? 'seen before' : 'new'}</span>`;
+    html += `<div class="g1"><div><b>${esc(g.rule)}</b> ${badge}</div>
+      <div>${esc(g.summary)}</div><div class="ex">${esc(g.example)}</div></div>`;
+  }
+  return html + `</div>`;
+}
+
+// click a word: show its details and highlight its kanji below
+function bindTokens(c, id) {
+  c.querySelectorAll('.tok:not(.punct)').forEach(el => el.onclick = () => {
+    const li = +el.dataset.l, t = c._lines[li].tokens[+el.dataset.t];
+    const box = c.querySelector(`#d${id}-${li}`);
+    const was = el.classList.contains('sel');
+    c.querySelectorAll('.tok.sel, .kc.sel').forEach(x => x.classList.remove('sel'));
+    if (was) { box.classList.remove('open'); return; }
+    el.classList.add('sel');
+    const ks = [...new Set((t.surface.match(KANJI) || []))];
+    ks.forEach(k => c.querySelector(`.kc[data-k="${k}"]`)?.classList.add('sel'));
+    let d = `<b>${esc(t.surface)}</b> ${t.reading ? '· ' + esc(t.reading) : ''} ${t.romaji ? '· <i>' + esc(t.romaji) + '</i>' : ''} — ${esc(t.gloss)}`;
+    if (t.dict_form) d += `<br>◆ dictionary form <b>${esc(t.dict_form)}</b>${t.form_note ? ' — ' + esc(t.form_note) : ''}`;
+    for (const k of ks) { const i = c._kanji[k]; if (i) d += `<br>${esc(k)} = ${esc(i.meaning)} · ${esc(i.components)}`; }
+    box.innerHTML = d; box.classList.add('open');
+  });
+}
+</script>
+<style>
+  :root {
+    --bg:#fbfbf9; --fg:#1d1d1f; --muted:#6b6b70; --faint:#9a9aa0; --line:#e6e6e2; --card:#ffffff;
+    --accent:#c2410c; --accent-bg:#fff4ec; --chip:#f2f2ef; --sel:#fde7d6;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg:#1b1b1d; --fg:#ececec; --muted:#a0a0a6; --faint:#76767c; --line:#333338; --card:#242427;
+    --accent:#ff9a5c; --accent-bg:#3a2418; --chip:#2e2e32; --sel:#4a2c1a;
+  } }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:10px 12px 24px; background:var(--bg); color:var(--fg);
+         font:14px/1.45 -apple-system, "Hiragino Sans", "Noto Sans JP", sans-serif; }
+  .toolbar { position:sticky; top:0; z-index:2; display:flex; gap:6px; flex-wrap:wrap; align-items:center;
+             background:var(--bg); padding:4px 0 8px; font-size:12px; color:var(--muted); }
+  .toolbar button { font:inherit; border:1px solid var(--line); background:var(--card); color:var(--fg);
+                    border-radius:999px; padding:3px 10px; cursor:pointer; }
+  .toolbar button.off { color:var(--faint); text-decoration:line-through; background:transparent; }
+  section.card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:14px; }
+  .thumb { max-width:100%; max-height:90px; border-radius:6px; border:1px solid var(--line); display:block; margin-bottom:10px; }
+  .pending { color:var(--muted); }
+  .spin { display:inline-block; width:10px; height:10px; border:2px solid var(--muted); border-top-color:transparent;
+          border-radius:50%; animation:s 1s linear infinite; margin-right:6px; vertical-align:-1px; }
+  @keyframes s { to { transform:rotate(360deg) } }
+  .err { color:var(--accent); white-space:pre-wrap; }
+
+  /* word-by-word */
+  .il { display:flex; flex-wrap:wrap; gap:10px 4px; align-items:flex-start; }
+  .tok { display:flex; flex-direction:column; align-items:center; text-align:center; padding:4px 6px 5px;
+         border-radius:8px; cursor:pointer; min-width:28px; border:1px solid transparent; }
+  .tok:hover { border-color:var(--line); }
+  .tok.sel { background:var(--sel); border-color:var(--accent); }
+  .tok .s { font-size:24px; line-height:1.15; font-weight:500; letter-spacing:.02em; }
+  .tok .r { font-size:12px; color:var(--muted); min-height:17px; }
+  .tok .ro { font-size:11px; color:var(--faint); min-height:15px; font-style:italic; }
+  .tok .g { font-size:12px; color:var(--accent); min-height:17px; max-width:110px; line-height:1.25; }
+  .tok.particle .s, .tok.ending .s { color:var(--muted); }
+  .tok.punct { cursor:default; padding:4px 1px; min-width:0; }
+  .tok.punct .s { color:var(--faint); }
+  .tok.sound .s { color:var(--faint); font-size:18px; }
+  .tok .chg { font-size:10px; color:var(--accent); line-height:1; height:8px; }
+  body.hide-r .tok .r, body.hide-ro .tok .ro, body.hide-g .tok .g { visibility:hidden; }
+  body.hide-r .tok:hover .r, body.hide-ro .tok:hover .ro, body.hide-g .tok:hover .g,
+  body.hide-r .tok.sel .r, body.hide-ro .tok.sel .ro, body.hide-g .tok.sel .g { visibility:visible; }
+
+  .detail { margin:6px 0 2px; padding:8px 10px; border-radius:8px; background:var(--accent-bg); font-size:13px; display:none; }
+  .detail.open { display:block; }
+  .detail b { font-size:15px; }
+
+  .tr { margin:10px 0 4px; padding-left:10px; border-left:3px solid var(--accent); }
+  .tr .lit { color:var(--muted); font-size:12.5px; }
+  .tr .nat { font-size:15px; font-weight:600; }
+  body.hide-tr .tr .nat { filter:blur(5px); cursor:pointer; }
+  body.hide-tr .tr .nat:hover { filter:none; }
+  .lineblock + .lineblock { margin-top:16px; padding-top:12px; border-top:1px dashed var(--line); }
+
+  h4 { margin:16px 0 8px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
+  .kgrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:8px; }
+  .kc { display:flex; gap:10px; border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+  .kc.sel { border-color:var(--accent); background:var(--accent-bg); }
+  .kc .big { font-size:38px; line-height:1; min-width:44px; text-align:center; padding-top:2px; }
+  .kc .m { font-weight:600; }
+  .kc .rd { font-size:12px; color:var(--muted); }
+  .kc .rd span { color:var(--fg); }
+  .chips { display:flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+  .chip { background:var(--chip); border-radius:6px; padding:1px 6px; font-size:12px; }
+  .chip.rad { border:1px dashed var(--faint); background:transparent; }
+  .gram { display:flex; flex-direction:column; gap:8px; }
+  .g1 { font-size:13px; }
+  .g1 .ex { color:var(--muted); font-size:12.5px; }
+  .badge { font-size:10.5px; border-radius:999px; padding:0 7px; vertical-align:1px; }
+  .badge.new { background:var(--accent); color:var(--card); }
+  .badge.old { border:1px solid var(--line); color:var(--muted); }
+  .notes ul { margin:0; padding-left:18px; } .notes p, .notes li { font-size:13px; margin:2px 0; }
+  details.notes { margin-top:14px; }
+  details.notes summary { cursor:pointer; color:var(--muted); font-size:12px; letter-spacing:.06em; text-transform:uppercase; }
+  details.notes p, details.notes li { font-size:13.5px; }
+  .pending.small { font-size:12.5px; margin:14px 0 0; }
+  .foot { margin-top:10px; font-size:11.5px; color:var(--faint); }
+  .empty { color:var(--muted); padding:20px 4px; }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <span>Show:</span>
+  <button data-k="r">reading</button>
+  <button data-k="ro">romaji</button>
+  <button data-k="g">meaning</button>
+  <button data-k="tr">translation</button>
+  <span style="flex:1"></span><span>hidden rows show on hover</span>
+</div>
+<div id="list"><p class="empty" id="empty">Press ⌃⌥J over a game, then click Japanese text or drag a box around it.</p></div>
+
+<script>
+const $list = document.getElementById('list');
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const KANJI = /[㐀-䶿一-鿿]/g;
+
+// show/hide toggles (remembered per viewer)
+let prefs = {};
+try { prefs = JSON.parse(localStorage.getItem('jp-hide') || '{}'); } catch (e) {}
+function applyPrefs() {
+  for (const b of document.querySelectorAll('.toolbar button')) {
+    const k = b.dataset.k; b.classList.toggle('off', !!prefs[k]);
+    document.body.classList.toggle('hide-' + k, !!prefs[k]);
+  }
+}
+document.querySelectorAll('.toolbar button').forEach(b => b.onclick = () => {
+  prefs[b.dataset.k] = !prefs[b.dataset.k];
+  try { localStorage.setItem('jp-hide', JSON.stringify(prefs)); } catch (e) {}
+  applyPrefs();
+});
+applyPrefs();
+
+function card(id) { return document.getElementById('c' + id); }
+
+function addPending(id, thumb, text) {
+  document.getElementById('empty')?.remove();
+  const c = document.createElement('section'); c.className = 'card'; c.id = 'c' + id;
+  c.innerHTML = (thumb ? `<img class="thumb" src="data:image/png;base64,${thumb}">` : '') +
+    `<p class="pending"><span class="spin"></span>Claude is reading ${text ? '「' + esc(text) + '」' : 'it'}… about 30–60 s</p>`;
+  $list.prepend(c);
+}
+
+function setError(id, msg) {
+  const c = card(id); c.querySelector('.pending')?.remove();
+  c.insertAdjacentHTML('beforeend', `<p class="err">Failed: ${esc(msg)}</p>`);
+}
+
+function setResult(id, r) {
+  let c = card(id);
+  if (!c) { addPending(id, '', ''); c = card(id); }
+  c.querySelector('.pending')?.remove();
+  const kanjiInfo = {}; (r.kanji || []).forEach(k => kanjiInfo[k.kanji] = k);
+
+  let html = '';
+  (r.lines || []).forEach((line, li) => {
+    const toks = (line.tokens && line.tokens.length) ? line.tokens
+      : [{ surface: line.jp, reading: line.hiragana, romaji: line.romaji, gloss: '', kind: 'word' }];
+    html += `<div class="lineblock"><div class="il">`;
+    toks.forEach((t, ti) => {
+      const kind = t.kind || 'word';
+      if (kind === 'punct') { html += `<div class="tok punct"><div class="chg"></div><div class="s">${esc(t.surface)}</div></div>`; return; }
+      const showReading = t.reading && t.reading !== t.surface;
+      html += `<div class="tok ${esc(kind)}" data-l="${li}" data-t="${ti}">
+        <div class="chg">${t.dict_form ? '◆' : ''}</div>
+        <div class="s">${esc(t.surface)}</div>
+        <div class="r">${showReading ? esc(t.reading) : ''}</div>
+        <div class="ro">${esc(t.romaji)}</div>
+        <div class="g">${esc(t.gloss)}</div></div>`;
+    });
+    html += `</div><div class="detail" id="d${id}-${li}"></div>
+      <div class="tr"><div class="lit">${esc(line.literal)}</div><div class="nat">${esc(line.natural)}</div></div></div>`;
+  });
+
+  const direct = (r.kanji || []).filter(k => k.direct);
+  if (direct.length) {
+    html += `<h4>Kanji decomposition</h4><div class="kgrid">`;
+    for (const k of direct) {
+      const parts = String(k.components || '').split('+').map(s => s.trim()).filter(Boolean);
+      html += `<div class="kc" data-k="${esc(k.kanji)}"><div class="big">${esc(k.kanji)}</div><div>
+        <div class="m">${esc(k.meaning)}</div>
+        <div class="rd">on <span>${esc(k.onyomi)}</span> · kun <span>${esc(k.kunyomi)}</span></div>
+        <div class="chips">${parts.map(p => `<span class="chip">${esc(p)}</span>`).join('')}
+          ${k.radical ? `<span class="chip rad" title="radical">部首 ${esc(k.radical)}</span>` : ''}</div>
+      </div></div>`;
+    }
+    html += `</div>`;
+  }
+  if ((r.grammar || []).length) {
+    html += `<h4>Grammar</h4><div class="gram">`;
+    for (const g of r.grammar) {
+      const badge = g.known === undefined ? '' : `<span class="badge ${g.known ? 'old' : 'new'}">${g.known ? 'seen before' : 'new'}</span>`;
+      html += `<div class="g1"><div><b>${esc(g.rule)}</b> ${badge}</div>
+        <div>${esc(g.summary)}</div><div class="ex">${esc(g.example)}</div></div>`;
+    }
+    html += `</div>`;
+  }
+  if (r.explanation_md) {
+    const md = window.marked ? marked.parse(r.explanation_md) : `<pre>${esc(r.explanation_md)}</pre>`;
+    html += `<h4>Memory tricks</h4><div class="notes">${md}</div>`;
+  }
+  html += `<div class="foot">${r.saved === false ? 'Not saved' : 'Saved to japanese.xlsx and grammar.md'}</div>`;
+  c.insertAdjacentHTML('beforeend', html);
+
+  // click a word: show its details and highlight its kanji below
+  c.querySelectorAll('.tok:not(.punct)').forEach(el => el.onclick = () => {
+    const li = +el.dataset.l, t = r.lines[li].tokens[+el.dataset.t];
+    const box = c.querySelector(`#d${id}-${li}`);
+    const was = el.classList.contains('sel');
+    c.querySelectorAll('.tok.sel, .kc.sel').forEach(x => x.classList.remove('sel'));
+    if (was) { box.classList.remove('open'); return; }
+    el.classList.add('sel');
+    const ks = [...new Set((t.surface.match(KANJI) || []))];
+    ks.forEach(k => c.querySelector(`.kc[data-k="${k}"]`)?.classList.add('sel'));
+    let d = `<b>${esc(t.surface)}</b> ${t.reading ? '· ' + esc(t.reading) : ''} ${t.romaji ? '· <i>' + esc(t.romaji) + '</i>' : ''} — ${esc(t.gloss)}`;
+    if (t.dict_form) d += `<br>◆ dictionary form <b>${esc(t.dict_form)}</b>${t.form_note ? ' — ' + esc(t.form_note) : ''}`;
+    for (const k of ks) { const i = kanjiInfo[k]; if (i) d += `<br>${esc(k)} = ${esc(i.meaning)} · ${esc(i.components)}`; }
+    box.innerHTML = d; box.classList.add('open');
+  });
+}
+</script>
+</body>
+</html>

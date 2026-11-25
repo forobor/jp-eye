@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Japanese Brain Test</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<style>
+  :root { --bg:#f7f7f5; --fg:#1d1d1f; --muted:#6b6b70; --card:#fff; --line:#e3e3e0; --accent:#d9480f; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161618; --fg:#ececec; --muted:#9a9aa0; --card:#202023; --line:#333338; --accent:#ff8a4c; } }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "Hiragino Sans", sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:16px; }
+  h1 { font-size:20px; margin:4px 0 12px; }
+  .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:12px; color:var(--muted); }
+  .wrap { display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:16px; }
+  @media (max-width:800px) { .wrap { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; min-width:0; }
+  #stage { position:relative; display:inline-block; max-width:100%; user-select:none; touch-action:none; }
+  #stage img { max-width:100%; display:block; }
+  .box { position:absolute; border:2px solid var(--accent); border-radius:3px; background:rgba(217,72,15,.08); cursor:pointer; }
+  .box:hover { background:rgba(217,72,15,.25); }
+  #drag { position:absolute; border:2px dashed var(--accent); display:none; pointer-events:none; }
+  #out table { border-collapse:collapse; font-size:14px; display:block; overflow-x:auto; }
+  #out td, #out th { border:1px solid var(--line); padding:3px 7px; vertical-align:top; }
+  .muted { color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Japanese Brain Test</h1>
+  <div class="bar">
+    <input type="file" id="file" accept="image/*">
+    <label><input type="checkbox" id="save" checked> save to study files</label>
+    <span id="status"></span>
+  </div>
+  <div class="wrap">
+    <div class="card">
+      <div id="stage"><img id="img" alt=""><div id="drag"></div></div>
+      <p class="muted">Click an outlined line, or drag a box around any text (for vertical text, for example).</p>
+    </div>
+    <iframe class="card" id="out" src="/panel" style="padding:0; width:100%; height:80vh; border:1px solid var(--line)"></iframe>
+  </div>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let blob = null, natW = 1;
+const status = t => $("status").textContent = t;
+
+$("file").onchange = async e => {
+  blob = e.target.files[0]; if (!blob) return;
+  $("img").src = URL.createObjectURL(blob);
+  document.querySelectorAll(".box").forEach(b => b.remove());
+  await $("img").decode(); natW = $("img").naturalWidth;
+  status("Finding Japanese text…");
+  const fd = new FormData(); fd.append("image", blob);
+  const r = await fetch("/detect", { method:"POST", body:fd }).then(r => r.json());
+  status(`${r.lines.length} line(s) found`);
+  const s = $("img").clientWidth / natW;
+  for (const l of r.lines) {
+    const d = document.createElement("div"); d.className = "box"; d.title = l.text;
+    const [x,y,w,h] = l.box;
+    Object.assign(d.style, { left:x*s+"px", top:y*s+"px", width:w*s+"px", height:h*s+"px" });
+    d.onpointerdown = ev => ev.stopPropagation();
+    d.onclick = () => explain(l.box, l.text);
+    $("stage").appendChild(d);
+  }
+};
+
+// drag a rectangle
+let start = null;
+$("stage").onpointerdown = e => {
+  if (!blob) return;
+  const r = $("stage").getBoundingClientRect();
+  start = { x:e.clientX - r.left, y:e.clientY - r.top };
+  Object.assign($("drag").style, { display:"block", left:start.x+"px", top:start.y+"px", width:0, height:0 });
+};
+$("stage").onpointermove = e => {
+  if (!start) return;
+  const r = $("stage").getBoundingClientRect(), x = e.clientX - r.left, y = e.clientY - r.top;
+  Object.assign($("drag").style, { left:Math.min(x,start.x)+"px", top:Math.min(y,start.y)+"px",
+    width:Math.abs(x-start.x)+"px", height:Math.abs(y-start.y)+"px" });
+};
+window.onpointerup = () => {
+  if (!start) return; start = null;
+  const d = $("drag").style; d.display = "none";
+  const s = natW / $("img").clientWidth, w = parseFloat(d.width), h = parseFloat(d.height);
+  if (w > 8 && h > 8) explain([parseFloat(d.left)*s, parseFloat(d.top)*s, w*s, h*s], "");
+};
+
+let nextId = 0;
+async function explain(box, text) {
+  status("Starting…");
+  const id = ++nextId, P = $("out").contentWindow;
+  P.addPending(id, "", text);
+  const fd = new FormData();
+  fd.append("image", blob); fd.append("box", box.map(Math.round).join(","));
+  fd.append("text", text); fd.append("save", $("save").checked);
+  const r = await fetch("/jobs", { method:"POST", body:fd });
+  const j = await r.json();
+  if (!r.ok) { status("Error"); P.setError(id, JSON.stringify(j.detail || "failed")); return; }
+  status("Started");
+  P.follow(id, j.job);
+}
+</script>
+</body>
+</html>
